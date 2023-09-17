@@ -56,10 +56,10 @@ interface Forecast {
 function checkAndAlert() {
   const forecast: Forecast = getForecast();
   const THRESHOLDS = {
-    lowsBelow: PropertiesService.getScriptProperties().getProperty(
+    lowsBelow: +PropertiesService.getScriptProperties().getProperty(
       'RECORD_LOW_ROUNDED_UP'
     ),
-    highsBelow: PropertiesService.getScriptProperties().getProperty(
+    highsBelow: +PropertiesService.getScriptProperties().getProperty(
       'RECORD_LOW_HIGH_ROUNDED_UP'
     ),
   };
@@ -89,19 +89,23 @@ function checkAndAlert() {
   if (forecastHasColdFront) {
     notifyOfColdFront();
   }
-  if (roundUpNearestTen(lowestMin) < +THRESHOLDS.lowsBelow) {
+  const lowestMinIsBelowThis = roundUpNearestTen(lowestMin);
+  Logger.log(`Lowest Low is Below ${lowestMinIsBelowThis}`);
+  if (lowestMinIsBelowThis < THRESHOLDS.lowsBelow) {
     PropertiesService.getScriptProperties().setProperty(
       'RECORD_LOW_ROUNDED_UP',
-      roundUpNearestTen(lowestMin).toFixed(0)
+      lowestMinIsBelowThis.toFixed(0)
     );
-    notifyOfRecord('low', roundUpNearestTen(lowestMin));
+    notifyOfRecord('low', lowestMinIsBelowThis);
   }
-  if (roundUpNearestTen(lowestMax) < +THRESHOLDS.highsBelow) {
+  const lowestHighIsBelowThis = roundUpNearestTen(lowestMax);
+  Logger.log(`Lowest High is Below ${lowestHighIsBelowThis}`);
+  if (lowestHighIsBelowThis < THRESHOLDS.highsBelow) {
     PropertiesService.getScriptProperties().setProperty(
       'RECORD_LOW_HIGH_ROUNDED_UP',
-      roundUpNearestTen(lowestMax).toFixed(0)
+      lowestHighIsBelowThis.toFixed(0)
     );
-    notifyOfRecord('high', roundUpNearestTen(lowestMax));
+    notifyOfRecord('high', lowestHighIsBelowThis);
   }
   return;
 }
@@ -161,12 +165,12 @@ function aggregateMinTemperatures(hourlyForecast: Forecast): number[] {
 function aggregateMaxTemperatures(hourlyForecast: Forecast): number[] {
   const forecastArray = hourlyForecast.list;
   // Create an empty object to store the lowest temp_min values for each date.
-  var maxTemperaturesByDate = {};
+  let maxTemperaturesByDate = {};
 
   // Iterate through the forecastArray and update the minTemperaturesByDate object.
   for (var i = 0; i < forecastArray.length; i++) {
-    var forecast = forecastArray[i];
-    var date = new Date(forecast.dt * 1000).toDateString(); // Convert epoch time to date string
+    const forecast = forecastArray[i];
+    const date = new Date(forecast.dt * 1000).toDateString(); // Convert epoch time to date string
 
     if (
       !maxTemperaturesByDate[date] ||
@@ -179,7 +183,14 @@ function aggregateMaxTemperatures(hourlyForecast: Forecast): number[] {
   // Convert the values from the minTemperaturesByDate object to an array.
   var minTemperaturesArray = [];
   for (var date in maxTemperaturesByDate) {
-    minTemperaturesArray.push(Math.round(maxTemperaturesByDate[date]));
+    const forecastsForSameDate = forecastArray.filter(
+      (section) => new Date(section.dt * 1000).toDateString() === date
+    ).length;
+    const NUM_FORECASTS_PER_DAY = 8; // 24 hours/3-hour-forecast sections
+    if (forecastsForSameDate === NUM_FORECASTS_PER_DAY) {
+      // only include full days to avoid false "record-low highs"
+      minTemperaturesArray.push(Math.round(maxTemperaturesByDate[date]));
+    }
   }
 
   return minTemperaturesArray;
