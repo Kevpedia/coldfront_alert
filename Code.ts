@@ -56,8 +56,12 @@ interface Forecast {
 function checkAndAlert() {
   const forecast: Forecast = getForecast();
   const THRESHOLDS = {
-    lowsBelow: [70, 60, 50, 40, 30],
-    highsBelow: [80, 70, 60, 50, 40, 30],
+    lowsBelow: PropertiesService.getScriptProperties().getProperty(
+      'RECORD_LOW_ROUNDED_UP'
+    ),
+    highsBelow: PropertiesService.getScriptProperties().getProperty(
+      'RECORD_LOW_HIGH_ROUNDED_UP'
+    ),
   };
   const dailyMinTemps = aggregateMinTemperatures(forecast);
   const lowestMin = dailyMinTemps.reduce((minThusFar, current) => {
@@ -65,10 +69,15 @@ function checkAndAlert() {
   });
   Logger.log(`daily mins: ${dailyMinTemps.join()}; lowest = ${lowestMin}`);
   const dailyMaxTemps = aggregateMaxTemperatures(forecast);
-  const highestMax = dailyMinTemps.reduce((maxThusFar, current) => {
+  const highestMax = dailyMaxTemps.reduce((maxThusFar, current) => {
     return current > maxThusFar ? current : maxThusFar;
   });
-  Logger.log(`daily maxes: ${dailyMaxTemps.join()}; highest = ${highestMax}`);
+  const lowestMax = dailyMaxTemps.reduce((minThusFar, current) => {
+    return current < minThusFar ? current : minThusFar;
+  });
+  Logger.log(
+    `daily maxes: ${dailyMaxTemps.join()}; highest = ${highestMax}; lowest = ${lowestMax}`
+  );
   const forecastHasColdFront = hasColdFront(dailyMinTemps);
   Logger.log(
     `${dailyMinTemps.length} day forecast for ${forecast.city.name} ${
@@ -79,6 +88,20 @@ function checkAndAlert() {
   );
   if (forecastHasColdFront) {
     notifyOfColdFront();
+  }
+  if (roundUpNearestTen(lowestMin) < +THRESHOLDS.lowsBelow) {
+    PropertiesService.getScriptProperties().setProperty(
+      'RECORD_LOW_ROUNDED_UP',
+      roundUpNearestTen(lowestMin).toFixed(0)
+    );
+    notifyOfRecord('low', roundUpNearestTen(lowestMin));
+  }
+  if (roundUpNearestTen(lowestMax) < +THRESHOLDS.highsBelow) {
+    PropertiesService.getScriptProperties().setProperty(
+      'RECORD_LOW_HIGH_ROUNDED_UP',
+      roundUpNearestTen(lowestMax).toFixed(0)
+    );
+    notifyOfRecord('high', roundUpNearestTen(lowestMax));
   }
   return;
 }
@@ -185,6 +208,26 @@ function notifyOfColdFront() {
     file_name: 'giphy.webp',
     file_type: 'image/webp',
     file_url: 'https://i.giphy.com/media/huJmPXfeir5JlpPAx0/giphy.webp',
+  };
+  const params: GoogleAppsScript.URL_Fetch.URLFetchRequestOptions = {
+    headers: {
+      'Access-Token': TOKEN,
+      'Content-Type': 'application/json',
+    },
+    method: 'post',
+    payload: JSON.stringify(note),
+  };
+  UrlFetchApp.fetch(URL, params);
+  return;
+}
+function notifyOfRecord(type: 'low' | 'high', thresholdCrossed: number) {
+  const TOKEN =
+    PropertiesService.getScriptProperties().getProperty('PUSHBULLETKEY');
+  const URL = 'https://api.pushbullet.com/v2/pushes';
+  const note = {
+    type: 'note',
+    title: '❄️ New Cold Record ❄️',
+    body: `We're forecasted to get out first ${type} below ${thresholdCrossed}°!`,
   };
   const params: GoogleAppsScript.URL_Fetch.URLFetchRequestOptions = {
     headers: {
