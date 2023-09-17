@@ -1,0 +1,10 @@
+{
+  "devDependencies": {
+    "@types/google-apps-script": "^1.0.47",
+    "google-apps-script-bigquery": "^0.0.1",
+    "typescript": "^4.5.2"
+  },
+  "dependencies": {
+    "@types/mime-types": "^2.1.1"
+  }
+}
